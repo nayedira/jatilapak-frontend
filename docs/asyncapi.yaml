@@ -1,0 +1,465 @@
+asyncapi: 2.6.0
+id: urn:jatilapak:chat-ws
+tags:
+  - name: Chat
+info:
+  title: JatiLapak Chat WebSocket
+  version: 0.1.0
+  description: |
+    Protokol WebSocket untuk chat real-time JatiLapak.
+
+    Status: `planned` (belum diimplementasikan).
+
+    Aturan utama:
+    - Klien terhubung ke `/ws/chat/{room_id}`.
+    - Autentikasi dilakukan lewat pesan `auth` pertama (bukan query string panjang).
+    - Pesan disimpan ke database sebelum di-broadcast.
+    - `client_message_id` dipakai untuk idempotensi pengiriman.
+    - Riwayat pesan dan daftar room tetap memakai REST.
+  contact:
+    name: Tim Backend JatiLapak
+    url: https://jatilapak.example
+    email: backend@jatilapak.example
+  license:
+    name: Proprietary
+    url: https://jatilapak.example/license
+  x-status: planned
+servers:
+  local:
+    url: localhost:3030
+    protocol: ws
+    description: Local development
+    security:
+      - bearerAuth: []
+  staging:
+    url: api.jatilapak.example
+    protocol: wss
+    description: Staging placeholder (belum aktif)
+    security:
+      - bearerAuth: []
+defaultContentType: application/json
+channels:
+  /ws/chat/{room_id}:
+    description: |
+      Channel percakapan untuk satu room.
+
+      Alur:
+      1. Klien konek.
+      2. Klien mengirim `auth` berisi JWT dalam 5 detik.
+      3. Server memverifikasi token dan keanggotaan room.
+      4. Server membalas `auth.ok`.
+      5. Klien mengirim `message.send`; server menyimpan lalu broadcast `message.created`.
+      6. Klien mengirim `message.read`; server broadcast `message.read`.
+      7. Heartbeat `ping`/`pong` setiap 30 detik.
+
+      Reconnect: klien mengirim `last_chat_id` pada pesan `auth` untuk melanjutkan.
+    parameters:
+      room_id:
+        description: UUID room dari REST `POST /api/v1/chat/rooms`.
+        schema:
+          type: string
+          format: uuid
+    publish:
+      operationId: sendChatCommand
+      summary: Klien mengirim event ke server
+      message:
+        oneOf:
+          - $ref: '#/components/messages/AuthRequest'
+          - $ref: '#/components/messages/MessageSend'
+          - $ref: '#/components/messages/MessageReadCommand'
+          - $ref: '#/components/messages/Ping'
+    subscribe:
+      operationId: receiveChatEvent
+      summary: Server mengirim event ke klien
+      message:
+        oneOf:
+          - $ref: '#/components/messages/AuthOk'
+          - $ref: '#/components/messages/MessageCreated'
+          - $ref: '#/components/messages/MessageReadEvent'
+          - $ref: '#/components/messages/MeetingPointUpdated'
+          - $ref: '#/components/messages/ErrorEvent'
+          - $ref: '#/components/messages/Pong'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT HS256 dari login, dikirim lewat pesan auth pertama.
+  messages:
+    AuthRequest:
+      name: auth
+      messageId: auth.request
+      title: Autentikasi koneksi
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/AuthRequestPayload'
+      examples:
+        - payload:
+            type: auth
+            request_id: 7b0b1a52-1111-4a2b-8c3d-0e1f2a3b4c5d
+            data:
+              token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+              last_chat_id: 3d0f4a8e-1111-4222-8333-944455556666
+    AuthOk:
+      name: auth.ok
+      messageId: auth.ok
+      title: Autentikasi berhasil
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/AuthOkPayload'
+    MessageSend:
+      name: message.send
+      messageId: message.send
+      title: Kirim pesan
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MessageSendPayload'
+      examples:
+        - payload:
+            type: message.send
+            request_id: 7b0b1a52-1111-4a2b-8c3d-0e1f2a3b4c5d
+            data:
+              client_message_id: 11112222-3333-4444-8555-666677778888
+              teks_pesan: Halo, apakah buku masih ada?
+    MessageCreated:
+      name: message.created
+      messageId: message.created
+      title: Pesan tersimpan dan di-broadcast
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MessageCreatedPayload'
+    MessageReadCommand:
+      name: message.read.command
+      messageId: message.read.command
+      title: Tandai pesan dibaca
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MessageReadCommandPayload'
+    MessageReadEvent:
+      name: message.read.event
+      messageId: message.read.event
+      title: Status baca diperbarui
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MessageReadEventPayload'
+    MeetingPointUpdated:
+      name: meeting_point.updated
+      messageId: meeting_point.updated
+      title: Titik temu berubah
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MeetingPointUpdatedPayload'
+    ErrorEvent:
+      name: error
+      messageId: error
+      title: Kesalahan
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ErrorEventPayload'
+    Ping:
+      name: ping
+      messageId: ping
+      title: Heartbeat klien
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/PingPayload'
+    Pong:
+      name: pong
+      messageId: pong
+      title: Heartbeat server
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/PongPayload'
+  schemas:
+    AuthRequestPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [auth]
+        request_id:
+          type: string
+          format: uuid
+          description: Opsional, untuk mencocokkan respons.
+        data:
+          type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: JWT dari login.
+            last_chat_id:
+              type: string
+              format: uuid
+              nullable: true
+              description: Opsional, untuk melanjutkan setelah reconnect.
+    AuthOkPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [auth.ok]
+        request_id:
+          type: string
+          format: uuid
+        data:
+          type: object
+          required: [user_id, room_id]
+          properties:
+            user_id:
+              type: string
+              format: uuid
+            room_id:
+              type: string
+              format: uuid
+
+    MessageSendPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [message.send]
+        request_id:
+          type: string
+          format: uuid
+        data:
+          type: object
+          required: [client_message_id, teks_pesan]
+          properties:
+            client_message_id:
+              type: string
+              format: uuid
+              description: Kunci idempotensi unik per pengirim/room.
+            teks_pesan:
+              type: string
+              minLength: 1
+              maxLength: 2000
+    MessageCreatedPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [message.created]
+        data:
+          $ref: '#/components/schemas/ChatMessage'
+    MessageReadCommandPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [message.read]
+        request_id:
+          type: string
+          format: uuid
+        data:
+          type: object
+          required: [chat_ids]
+          properties:
+            chat_ids:
+              type: array
+              minItems: 1
+              items:
+                type: string
+                format: uuid
+    MessageReadEventPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [message.read]
+        data:
+          type: object
+          required: [room_id, reader_id, chat_ids, read_at]
+          properties:
+            room_id:
+              type: string
+              format: uuid
+            reader_id:
+              type: string
+              format: uuid
+            chat_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+            read_at:
+              type: string
+              format: date-time
+    MeetingPointUpdatedPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [meeting_point.updated]
+        data:
+          $ref: '#/components/schemas/ChatMeetingPoint'
+    ErrorEventPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [error]
+        request_id:
+          type: string
+          format: uuid
+        data:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              $ref: '#/components/schemas/ErrorCode'
+            message:
+              type: string
+    PingPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [ping]
+        data:
+          type: object
+          required: [timestamp]
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+    PongPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [pong]
+        data:
+          type: object
+          required: [timestamp]
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_ERROR
+        - EMAIL_DOMAIN_INVALID
+        - NPM_INVALID
+        - PASSWORD_INVALID
+        - TERMS_REQUIRED
+        - EMAIL_TAKEN
+        - NPM_TAKEN
+        - INVALID_CREDENTIALS
+        - NOT_VERIFIED
+        - BLOCKED
+        - OTP_INVALID
+        - OTP_EXPIRED
+        - OTP_ATTEMPTS_EXCEEDED
+        - RESEND_COOLDOWN
+        - RATE_LIMITED
+        - NOT_FOUND
+        - FORBIDDEN
+        - NOT_PARTICIPANT
+        - PRODUCT_NOT_SOLD
+        - REVIEW_ALREADY_EXISTS
+        - MEETING_POINT_CONFLICT
+        - UPSTREAM_ERROR
+        - UPSTREAM_TIMEOUT
+        - SERVICE_UNAVAILABLE
+        - INTERNAL_ERROR
+    ChatReadStatus:
+      type: string
+      enum: [Read, Unread]
+    MeetingPointStatus:
+      type: string
+      enum: [Proposed, Agreed, Rejected]
+    ChatMessage:
+      type: object
+      required: [chat_id, room_id, sender_id, receiver_id, teks_pesan, waktu_kirim, status_baca]
+      properties:
+        chat_id:
+          type: string
+          format: uuid
+        room_id:
+          type: string
+          format: uuid
+        sender_id:
+          type: string
+          format: uuid
+        receiver_id:
+          type: string
+          format: uuid
+        teks_pesan:
+          type: string
+        waktu_kirim:
+          type: string
+          format: date-time
+        status_baca:
+          $ref: '#/components/schemas/ChatReadStatus'
+        client_message_id:
+          type: string
+          format: uuid
+          nullable: true
+    MeetingPoint:
+      type: object
+      properties:
+        location_id:
+          type: string
+          format: uuid
+        nama_titik_temu:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        pin_point_notes:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+    ChatMeetingPoint:
+      type: object
+      required: [id, room_id, status, proposed_by, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        room_id:
+          type: string
+          format: uuid
+        meeting_point_id:
+          type: string
+          format: uuid
+          nullable: true
+        custom_latitude:
+          type: number
+          nullable: true
+        custom_longitude:
+          type: number
+          nullable: true
+        proposed_by:
+          type: string
+          format: uuid
+        pin_point_notes:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/MeetingPointStatus'
+        created_at:
+          type: string
+          format: date-time
+        agreed_at:
+          type: string
+          format: date-time
+          nullable: true
+        meeting_point:
+          $ref: '#/components/schemas/MeetingPoint'

@@ -1,0 +1,2197 @@
+openapi: 3.1.0
+info:
+  title: JatiLapak API
+  version: 0.1.0
+  description: |
+    Kontrak API JatiLapak (COD Aja) versi 1.
+
+    Dokumen ini adalah **kontrak penuh** dengan base path `/api/v1`.
+    Status operasi hanya metadata mesin, bukan pengganti keputusan produk.
+
+    Status operasi:
+    - `implemented`: sudah berjalan di backend.
+    - `pending-migration`: logika berjalan, path v1/`code` belum aktif.
+    - `planned`: target kontrak, belum diimplementasikan.
+    - `x-notes`: catatan gap antara kontrak dan implementasi saat ini.
+
+    Base path versi: `/api/v1`. Endpoint operasional `GET /health` tidak memakai versi.
+    Path lama `/api/auth/*` dipertahankan sebagai alias deprecated.
+    Ringkasan perubahan dari dokumen lama: `CONTEXT/API_CHANGELOG.md`.
+  contact:
+    name: Tim Backend JatiLapak
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: '{protocol}://{host}:{port}'
+    description: Local development
+    variables:
+      protocol:
+        default: http
+        enum: [http, https]
+      host:
+        default: localhost
+      port:
+        default: '3030'
+  - url: '{protocol}://{host}'
+    description: Staging placeholder (belum aktif)
+    variables:
+      protocol:
+        default: https
+        enum: [http, https]
+      host:
+        default: api.jatilapak.example
+tags:
+  - name: Health
+    description: Status server dan database
+  - name: Auth
+    description: Register, verifikasi OTP, resend OTP, login
+  - name: Profile
+    description: Profil pengguna terverifikasi
+  - name: Uploads
+    description: Unggah gambar ke Cloudinary melalui backend
+  - name: Products
+    description: Katalog dan manajemen listing
+  - name: MeetingPoints
+    description: Master titik temu COD dan kesepakatan per chat
+  - name: Chat
+    description: Room dan pesan (REST + WebSocket)
+  - name: Reviews
+    description: Rating dan ulasan transaksi
+  - name: Reports
+    description: Laporan pengguna
+  - name: Admin
+    description: Moderasi laporan dan ringkasan AI
+security: []
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Cek status server dan database
+      operationId: getHealth
+      x-status: implemented
+      responses:
+        '200':
+          description: Server dan database sehat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: Success
+                response_code: 200
+                message: Server sehat
+                data:
+                  status: ok
+                  database: ok
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Registrasi akun baru dan kirim OTP
+      operationId: registerUser
+      x-status: pending-migration
+      x-legacy-path: /api/auth/register
+      x-notes: Path v1 belum aktif di backend; alias legacy tersedia. Field `code` pada error belum diimplementasikan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              nama_lengkap: Tester JatiLapak
+              npm: '140810249999'
+              email_kampus: tester@mail.unpad.ac.id
+              password: Password123!
+              program_studi: Teknik Informatika
+              fakultas: FMIPA
+              accept_terms: true
+      responses:
+        '201':
+          description: Registrasi berhasil, user berstatus pending_otp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+              example:
+                status: Created
+                response_code: 201
+                message: Registrasi berhasil, silakan verifikasi OTP
+                data:
+                  user_id: 5529734c-319a-4458-b8b3-78fd6247a0a2
+                  status: pending_otp
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/verify-otp:
+    post:
+      tags: [Auth]
+      summary: Verifikasi kode OTP email kampus
+      operationId: verifyOtp
+      x-status: pending-migration
+      x-legacy-path: /api/auth/verify-otp
+      x-notes: Tidak mengembalikan token. Token hanya diterbitkan oleh login. Field `code` belum diimplementasikan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOtpRequest'
+            example:
+              email_kampus: tester@mail.unpad.ac.id
+              otp: '123456'
+      responses:
+        '200':
+          description: Verifikasi berhasil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyOtpResponse'
+              example:
+                status: Success
+                response_code: 200
+                message: Verifikasi berhasil
+                data:
+                  status: verified
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/resend-otp:
+    post:
+      tags: [Auth]
+      summary: Kirim ulang OTP dengan aturan cooldown
+      operationId: resendOtp
+      x-status: pending-migration
+      x-legacy-path: /api/auth/resend-otp
+      x-notes: Respons sukses tidak memiliki field `data`. Pesan generik untuk mencegah enumerasi email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendOtpRequest'
+            example:
+              email_kampus: tester@mail.unpad.ac.id
+      responses:
+        '200':
+          description: Permintaan diterima (pesan generik)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResendOtpResponse'
+              example:
+                status: Success
+                response_code: 200
+                message: Jika email terdaftar, kode OTP baru akan dikirim
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login dan terbitkan JWT
+      operationId: loginUser
+      x-status: pending-migration
+      x-legacy-path: /api/auth/login
+      x-notes: Kredensial salah dan email tidak terdaftar memakai pesan yang sama. Field `code` belum diimplementasikan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email_kampus: tester@mail.unpad.ac.id
+              password: Password123!
+      responses:
+        '200':
+          description: Login berhasil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                status: Success
+                response_code: 200
+                message: Login berhasil
+                data:
+                  token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  user:
+                    user_id: 5529734c-319a-4458-b8b3-78fd6247a0a2
+                    nama_lengkap: Tester JatiLapak
+                    npm: '140810249999'
+                    email_kampus: tester@mail.unpad.ac.id
+                    program_studi: Teknik Informatika
+                    fakultas: FMIPA
+                    role: user
+                    status_verifikasi: verified
+                    tanggal_registrasi: '2026-11-01T13:48:12Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/profile:
+    get:
+      tags: [Profile]
+      summary: Ambil profil pengguna terverifikasi
+      operationId: getMyProfile
+      x-status: planned
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profil pengguna
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Profile]
+      summary: Perbarui profil dan preferensi kontak
+      operationId: updateMyProfile
+      x-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+            example:
+              foto_profil_url: https://res.cloudinary.com/demo/image/upload/profil.jpg
+              bio: Mahasiswa TI yang suka buku bekas.
+              kontak_darurat: '081234567890'
+      responses:
+        '200':
+          description: Profil diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/uploads/images:
+    post:
+      tags: [Uploads]
+      summary: Unggah satu gambar ke Cloudinary melalui backend
+      operationId: uploadImage
+      x-status: planned
+      x-notes: Endpoint tambahan di luar daftar API teknis, dipakai sebelum create/update produk dan bukti laporan.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                purpose:
+                  type: string
+                  enum: [product, profile, report]
+      responses:
+        '201':
+          description: Gambar tersimpan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadImageResponse'
+              example:
+                status: Created
+                response_code: 201
+                message: Upload berhasil
+                data:
+                  url: https://res.cloudinary.com/demo/image/upload/v1/products/a.jpg
+                  public_id: products/a
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: File terlalu besar (maks 2 MB)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Tipe file tidak didukung (jpg/png/webp)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/products:
+    get:
+      tags: [Products]
+      summary: Daftar produk dengan filter dan pagination
+      operationId: listProducts
+      x-status: planned
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Category'
+        - $ref: '#/components/parameters/Condition'
+        - $ref: '#/components/parameters/MinPrice'
+        - $ref: '#/components/parameters/MaxPrice'
+        - $ref: '#/components/parameters/ProductStatus'
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Daftar produk
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Products]
+      summary: Buat listing baru
+      operationId: createProduct
+      x-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+            example:
+              judul_produk: Buku Kalkulus Bekas
+              deskripsi_produk: Edisi 9, kondisi baik, sedikit coretan.
+              kategori: Buku
+              harga: 75000
+              kondisi_barang: Used
+              fotos:
+                - url: https://res.cloudinary.com/demo/image/upload/v1/products/a.jpg
+                  urutan: 1
+                  is_primary: true
+      responses:
+        '201':
+          description: Listing dibuat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/products/{product_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Products]
+      summary: Detail produk
+      operationId: getProduct
+      x-status: planned
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Detail produk
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Products]
+      summary: Perbarui listing milik sendiri
+      operationId: updateProduct
+      x-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Listing diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Products]
+      summary: Soft delete listing milik sendiri
+      operationId: deleteProduct
+      x-status: planned
+      x-notes: Mengisi deleted_at; data tidak dihapus permanen.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Listing dihapus (soft delete)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/products/{product_id}/status:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    put:
+      tags: [Products]
+      summary: Ubah status stok produk
+      operationId: updateProductStatus
+      x-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductStatusRequest'
+            example:
+              status_stok: Sold
+      responses:
+        '200':
+          description: Status diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/meeting-points:
+    get:
+      tags: [MeetingPoints]
+      summary: Master titik temu COD aktif
+      operationId: listMeetingPoints
+      x-status: planned
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Daftar titik temu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingPointListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/chat/rooms:
+    get:
+      tags: [Chat]
+      summary: Daftar room milik pengguna
+      operationId: listChatRooms
+      x-status: planned
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Daftar room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRoomListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Chat]
+      summary: Buka atau ambil room untuk produk
+      operationId: openChatRoom
+      x-status: planned
+      x-notes: Idempoten. Jika room sudah ada untuk product+buyer+seller, kembalikan room yang sama.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChatRoomRequest'
+            example:
+              product_id: 3d0f4a8e-1111-4222-8333-944455556666
+      responses:
+        '200':
+          description: Room sudah ada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRoomResponse'
+        '201':
+          description: Room dibuat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRoomResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/chat/rooms/{room_id}/messages:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    get:
+      tags: [Chat]
+      summary: Riwayat pesan room (cursor pagination)
+      operationId: listChatMessages
+      x-status: planned
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BeforeCursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Riwayat pesan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessageListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Chat]
+      summary: Kirim pesan lewat REST (fallback WebSocket)
+      operationId: sendChatMessage
+      x-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendChatMessageRequest'
+            example:
+              teks_pesan: Halo, apakah buku masih ada?
+              client_message_id: 7b0b1a52-1111-4a2b-8c3d-0e1f2a3b4c5d
+      responses:
+        '201':
+          description: Pesan tersimpan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/chat/rooms/{room_id}/meeting-points:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      tags: [MeetingPoints]
+      summary: Usulkan titik temu COD pada room
+      operationId: proposeMeetingPoint
+      x-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeMeetingPointRequest'
+            examples:
+              master:
+                value:
+                  meeting_point_id: 8e2b1c44-1111-4222-8333-944455556666
+                  pin_point_notes: Depan pos satpam
+              custom:
+                value:
+                  custom_latitude: -6.9266
+                  custom_longitude: 107.7715
+                  pin_point_notes: Samping gerbang utama
+      responses:
+        '201':
+          description: Usulan titik temu dibuat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMeetingPointResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/chat/rooms/{room_id}/meeting-points/{meeting_id}/agree:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+      - $ref: '#/components/parameters/MeetingId'
+    post:
+      tags: [MeetingPoints]
+      summary: Sepakati titik temu pada room
+      operationId: agreeMeetingPoint
+      x-status: planned
+      x-notes: Hanya satu titik Agreed per room; titik Agreed sebelumnya menjadi Rejected.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Titik temu disepakati
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMeetingPointResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/reviews:
+    post:
+      tags: [Reviews]
+      summary: Kirim rating dan ulasan setelah transaksi
+      operationId: createReview
+      x-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewRequest'
+            example:
+              product_id: 3d0f4a8e-1111-4222-8333-944455556666
+              skor_rating: 5
+              teks_ulasan: Barang sesuai deskripsi, transaksi lancar.
+      responses:
+        '201':
+          description: Ulasan tersimpan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/users/{user_id}/reviews:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Reviews]
+      summary: Daftar ulasan dan reputasi pengguna
+      operationId: listUserReviews
+      x-status: planned
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Reputasi dan daftar ulasan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/reports:
+    post:
+      tags: [Reports]
+      summary: Kirim laporan pengguna atau produk
+      operationId: createReport
+      x-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRequest'
+            example:
+              target_type: product
+              target_id: 3d0f4a8e-1111-4222-8333-944455556666
+              alasan: Penipuan
+              deskripsi_laporan: Barang tidak sesuai dan penjual tidak merespons.
+              bukti_foto_url: https://res.cloudinary.com/demo/image/upload/v1/reports/a.jpg
+      responses:
+        '201':
+          description: Laporan dibuat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/admin/reports:
+    get:
+      tags: [Admin]
+      summary: Daftar laporan untuk moderasi
+      operationId: listAdminReports
+      x-status: planned
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ReportStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Daftar laporan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/admin/reports/{report_id}/actions:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    post:
+      tags: [Admin]
+      summary: Eksekusi aksi moderasi pada laporan
+      operationId: moderateReport
+      x-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModerateReportRequest'
+            example:
+              action: Delete_Listing
+      responses:
+        '200':
+          description: Aksi moderasi dieksekusi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/admin/reports/ai-summary:
+    post:
+      tags: [Admin]
+      summary: Ringkasan pola laporan dengan Gemini
+      operationId: summarizeReportsWithAi
+      x-status: planned
+      x-notes: Sinkron dengan timeout 15 detik; kegagalan upstream 502/504. Bisa diubah menjadi async.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiSummaryRequest'
+            example:
+              target_type: user
+              target_id: 5529734c-319a-4458-b8b3-78fd6247a0a2
+      responses:
+        '200':
+          description: Ringkasan dihasilkan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiSummaryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT HS256 dari login, TTL 24 jam.
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    BeforeCursor:
+      name: before
+      in: query
+      required: false
+      description: Cursor chat_id; ambil pesan lebih lama dari ID ini.
+      schema:
+        type: string
+        format: uuid
+    Category:
+      name: kategori
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/Category'
+    Condition:
+      name: kondisi
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/Condition'
+    MinPrice:
+      name: min_price
+      in: query
+      required: false
+      schema:
+        type: number
+        minimum: 0
+    MaxPrice:
+      name: max_price
+      in: query
+      required: false
+      schema:
+        type: number
+        minimum: 0
+    ProductStatus:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/ProductStatus'
+    SearchQuery:
+      name: q
+      in: query
+      required: false
+      description: Kata kunci judul/deskripsi.
+      schema:
+        type: string
+        maxLength: 100
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: 'Contoh: -tanggal_unggah (desc), harga (asc).'
+      schema:
+        type: string
+        default: '-tanggal_unggah'
+    ReportStatus:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/ReportStatus'
+    ProductId:
+      name: product_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RoomId:
+      name: room_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MeetingId:
+      name: meeting_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ReportId:
+      name: report_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  headers:
+    RetryAfter:
+      description: Detik sebelum permintaan boleh diulang.
+      schema:
+        type: integer
+        minimum: 0
+    RateLimitLimit:
+      description: Batas permintaan pada jendela waktu.
+      schema:
+        type: integer
+    RateLimitRemaining:
+      description: Sisa permintaan pada jendela waktu.
+      schema:
+        type: integer
+    RateLimitReset:
+      description: Detik sampai jendela waktu direset.
+      schema:
+        type: integer
+
+  responses:
+    BadRequest:
+      description: Input tidak valid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: Error Bad Request
+            response_code: 400
+            code: VALIDATION_ERROR
+            message: Data tidak valid
+            error: validation error
+    Unauthorized:
+      description: Token tidak ada, invalid, atau expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: Error Unauthorized
+            response_code: 401
+            code: INVALID_CREDENTIALS
+            message: Email atau password salah
+            error: email atau password salah
+    Forbidden:
+      description: Tidak berhak atau akun diblokir
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: Error Forbidden
+            response_code: 403
+            code: FORBIDDEN
+            message: Akun diblokir
+            error: akun diblokir
+    NotFound:
+      description: Resource tidak ditemukan
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: Error Not Found
+            response_code: 404
+            code: NOT_FOUND
+            message: Data tidak ditemukan
+            error: not found
+    Conflict:
+      description: Konflik data (duplikat/status)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: Error Conflict
+            response_code: 409
+            code: EMAIL_TAKEN
+            message: Email sudah terdaftar
+            error: email sudah terdaftar
+    TooManyRequests:
+      description: Rate limit atau cooldown
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+        RateLimit-Limit:
+          $ref: '#/components/headers/RateLimitLimit'
+        RateLimit-Remaining:
+          $ref: '#/components/headers/RateLimitRemaining'
+        RateLimit-Reset:
+          $ref: '#/components/headers/RateLimitReset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: Error Too Many Requests
+            response_code: 429
+            code: RESEND_COOLDOWN
+            message: Tunggu sebelum meminta kode baru
+            error: tunggu sebelum meminta otp baru
+    InternalServerError:
+      description: Kesalahan server
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: Internal Server Error
+            response_code: 500
+            code: INTERNAL_ERROR
+            message: Terjadi kesalahan pada server
+            error: internal server error
+    BadGateway:
+      description: Layanan upstream gagal (mis. Gemini)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: Error Bad Gateway
+            response_code: 502
+            code: UPSTREAM_ERROR
+            message: Gagal mengambil ringkasan AI
+            error: upstream error
+    GatewayTimeout:
+      description: Layanan upstream melewati batas waktu
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: Error Gateway Timeout
+            response_code: 504
+            code: UPSTREAM_TIMEOUT
+            message: Ringkasan AI melewati batas waktu
+            error: upstream timeout
+    ServiceUnavailable:
+      description: Server atau database tidak siap
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: Error Service Unavailable
+            response_code: 503
+            code: SERVICE_UNAVAILABLE
+            message: Database tidak terhubung
+            error: ping database failed
+
+  schemas:
+    Envelope:
+      type: object
+      required: [status, response_code]
+      properties:
+        status:
+          type: string
+          examples: [Success, Created, Error Bad Request]
+        response_code:
+          type: integer
+        message:
+          type: string
+        data:
+          description: Payload sukses; opsional dan bergantung endpoint.
+        error:
+          type: string
+          description: Detail internal; jangan ditampilkan mentah ke pengguna.
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [status, response_code, code, message]
+          properties:
+            status:
+              type: string
+              enum:
+                - Error Bad Request
+                - Error Unauthorized
+                - Error Forbidden
+                - Error Not Found
+                - Error Conflict
+                - Error Too Many Requests
+                - Internal Server Error
+                - Error Bad Gateway
+                - Error Gateway Timeout
+                - Error Service Unavailable
+            response_code:
+              type: integer
+              enum: [400, 401, 403, 404, 409, 429, 500, 502, 503, 504]
+
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_ERROR
+        - EMAIL_DOMAIN_INVALID
+        - NPM_INVALID
+        - PASSWORD_INVALID
+        - TERMS_REQUIRED
+        - EMAIL_TAKEN
+        - NPM_TAKEN
+        - INVALID_CREDENTIALS
+        - NOT_VERIFIED
+        - BLOCKED
+        - OTP_INVALID
+        - OTP_EXPIRED
+        - OTP_ATTEMPTS_EXCEEDED
+        - RESEND_COOLDOWN
+        - RATE_LIMITED
+        - NOT_FOUND
+        - FORBIDDEN
+        - NOT_PARTICIPANT
+        - PRODUCT_NOT_SOLD
+        - REVIEW_ALREADY_EXISTS
+        - MEETING_POINT_CONFLICT
+        - UPSTREAM_ERROR
+        - UPSTREAM_TIMEOUT
+        - SERVICE_UNAVAILABLE
+        - INTERNAL_ERROR
+
+    Role:
+      type: string
+      enum: [user, admin]
+    VerificationStatus:
+      type: string
+      enum: [pending_otp, verified, blocked]
+    Category:
+      type: string
+      enum: [Buku, Elektronik, Perabot, Pakaian, Makanan, Jasa]
+    Condition:
+      type: string
+      enum: [Used, New]
+    ProductStatus:
+      type: string
+      enum: [Available, Sold]
+    ChatReadStatus:
+      type: string
+      enum: [Read, Unread]
+    MeetingPointStatus:
+      type: string
+      enum: [Proposed, Agreed, Rejected]
+    ReportTargetType:
+      type: string
+      enum: [user, product]
+    ReportReason:
+      type: string
+      enum: [Spam, Akun Fiktif, Penipuan, Barang Terlarang]
+    ReportStatus:
+      type: string
+      enum: [Pending, Reviewed, Resolved, Rejected]
+    ModerationAction:
+      type: string
+      enum: [Delete_Listing, Block_User]
+
+    PaginationMeta:
+      type: object
+      required: [page, limit, total, total_page]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+        total_page:
+          type: integer
+          minimum: 0
+    CursorMeta:
+      type: object
+      required: [has_more]
+      properties:
+        next_cursor:
+          type: [string, 'null']
+          format: uuid
+        has_more:
+          type: boolean
+
+    User:
+      type: object
+      required: [user_id, nama_lengkap, npm, email_kampus, program_studi, fakultas, role, status_verifikasi, tanggal_registrasi]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        nama_lengkap:
+          type: string
+          maxLength: 100
+        npm:
+          type: string
+          pattern: '^[0-9]{12}$'
+        email_kampus:
+          type: string
+          format: email
+          pattern: '^[^@\s]+@mail\.unpad\.ac\.id$'
+        program_studi:
+          type: string
+          maxLength: 100
+        fakultas:
+          type: string
+          maxLength: 100
+        role:
+          $ref: '#/components/schemas/Role'
+        status_verifikasi:
+          $ref: '#/components/schemas/VerificationStatus'
+        tanggal_registrasi:
+          type: string
+          format: date-time
+    UserProfile:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            foto_profil_url:
+              type: [string, 'null']
+              format: uri
+            bio:
+              type: [string, 'null']
+            kontak_darurat:
+              type: [string, 'null']
+              maxLength: 30
+            average_rating:
+              type: [number, 'null']
+              format: float
+              minimum: 1
+              maximum: 5
+              description: Null jika belum ada ulasan.
+            total_reviews:
+              type: integer
+              minimum: 0
+    UserProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/UserProfile'
+    UpdateProfileRequest:
+      type: object
+      properties:
+        foto_profil_url:
+          type: [string, 'null']
+          format: uri
+        bio:
+          type: [string, 'null']
+          maxLength: 500
+        kontak_darurat:
+          type: [string, 'null']
+          maxLength: 30
+
+    HealthData:
+      type: object
+      required: [status, database]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        database:
+          type: string
+          enum: [ok]
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/HealthData'
+
+    RegisterRequest:
+      type: object
+      required: [nama_lengkap, npm, email_kampus, password, program_studi, fakultas, accept_terms]
+      properties:
+        nama_lengkap:
+          type: string
+          minLength: 1
+          maxLength: 100
+        npm:
+          type: string
+          pattern: '^[0-9]{12}$'
+        email_kampus:
+          type: string
+          format: email
+          pattern: '^[^@\s]+@mail\.unpad\.ac\.id$'
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+        program_studi:
+          type: string
+          minLength: 1
+          maxLength: 100
+        fakultas:
+          type: string
+          minLength: 1
+          maxLength: 100
+        accept_terms:
+          type: boolean
+          enum: [true]
+    RegisterData:
+      type: object
+      required: [user_id, status]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending_otp]
+    RegisterResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/RegisterData'
+
+    VerifyOtpRequest:
+      type: object
+      required: [email_kampus, otp]
+      properties:
+        email_kampus:
+          type: string
+          format: email
+        otp:
+          type: string
+          pattern: '^[0-9]{6}$'
+    VerifyOtpData:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [verified]
+    VerifyOtpResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/VerifyOtpData'
+
+    ResendOtpRequest:
+      type: object
+      required: [email_kampus]
+      properties:
+        email_kampus:
+          type: string
+          format: email
+    ResendOtpResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          description: Sukses tidak memiliki field data.
+
+    LoginRequest:
+      type: object
+      required: [email_kampus, password]
+      properties:
+        email_kampus:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+    LoginData:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: JWT HS256, TTL 24 jam.
+        user:
+          $ref: '#/components/schemas/User'
+    LoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/LoginData'
+
+    UploadImageData:
+      type: object
+      required: [url, public_id]
+      properties:
+        url:
+          type: string
+          format: uri
+        public_id:
+          type: string
+    UploadImageResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/UploadImageData'
+
+    ProductPhotoInput:
+      type: object
+      required: [url, urutan]
+      properties:
+        url:
+          type: string
+          format: uri
+        urutan:
+          type: integer
+          minimum: 1
+        is_primary:
+          type: boolean
+          default: false
+    ProductPhoto:
+      type: object
+      required: [foto_id, url, urutan, is_primary]
+      properties:
+        foto_id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        urutan:
+          type: integer
+          minimum: 1
+        is_primary:
+          type: boolean
+    CreateProductRequest:
+      type: object
+      required: [judul_produk, deskripsi_produk, kategori, harga, kondisi_barang]
+      properties:
+        judul_produk:
+          type: string
+          minLength: 1
+          maxLength: 150
+        deskripsi_produk:
+          type: string
+          minLength: 1
+        kategori:
+          $ref: '#/components/schemas/Category'
+        harga:
+          type: number
+          minimum: 0
+        kondisi_barang:
+          $ref: '#/components/schemas/Condition'
+        fotos:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/ProductPhotoInput'
+    UpdateProductRequest:
+      type: object
+      properties:
+        judul_produk:
+          type: string
+          minLength: 1
+          maxLength: 150
+        deskripsi_produk:
+          type: string
+          minLength: 1
+        kategori:
+          $ref: '#/components/schemas/Category'
+        harga:
+          type: number
+          minimum: 0
+        kondisi_barang:
+          $ref: '#/components/schemas/Condition'
+        fotos:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/ProductPhotoInput'
+    UpdateProductStatusRequest:
+      type: object
+      required: [status_stok]
+      properties:
+        status_stok:
+          $ref: '#/components/schemas/ProductStatus'
+    Product:
+      type: object
+      required: [product_id, user_id, judul_produk, deskripsi_produk, kategori, harga, kondisi_barang, status_stok, tanggal_unggah, updated_at, seller, fotos]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        judul_produk:
+          type: string
+        deskripsi_produk:
+          type: string
+        kategori:
+          $ref: '#/components/schemas/Category'
+        harga:
+          type: number
+        kondisi_barang:
+          $ref: '#/components/schemas/Condition'
+        status_stok:
+          $ref: '#/components/schemas/ProductStatus'
+        tanggal_unggah:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: [string, 'null']
+          format: date-time
+        seller:
+          $ref: '#/components/schemas/User'
+        fotos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductPhoto'
+    ProductResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/Product'
+    ProductListData:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    ProductListResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/ProductListData'
+
+    MeetingPoint:
+      type: object
+      required: [location_id, nama_titik_temu, latitude, longitude, is_active]
+      properties:
+        location_id:
+          type: string
+          format: uuid
+        nama_titik_temu:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        pin_point_notes:
+          type: [string, 'null']
+        is_active:
+          type: boolean
+    MeetingPointListResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/MeetingPoint'
+    ProposeMeetingPointRequest:
+      type: object
+      properties:
+        meeting_point_id:
+          type: [string, 'null']
+          format: uuid
+        custom_latitude:
+          type: [number, 'null']
+          minimum: -90
+          maximum: 90
+        custom_longitude:
+          type: [number, 'null']
+          minimum: -180
+          maximum: 180
+        pin_point_notes:
+          type: string
+          maxLength: 255
+      oneOf:
+        - required: [meeting_point_id]
+        - required: [custom_latitude, custom_longitude]
+    ChatMeetingPoint:
+      type: object
+      required: [id, room_id, status, proposed_by, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        room_id:
+          type: string
+          format: uuid
+        meeting_point_id:
+          type: [string, 'null']
+          format: uuid
+        custom_latitude:
+          type: [number, 'null']
+        custom_longitude:
+          type: [number, 'null']
+        proposed_by:
+          type: string
+          format: uuid
+        pin_point_notes:
+          type: [string, 'null']
+        status:
+          $ref: '#/components/schemas/MeetingPointStatus'
+        created_at:
+          type: string
+          format: date-time
+        agreed_at:
+          type: [string, 'null']
+          format: date-time
+        meeting_point:
+          $ref: '#/components/schemas/MeetingPoint'
+    ChatMeetingPointResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/ChatMeetingPoint'
+
+    ChatRoom:
+      type: object
+      required: [room_id, product_id, buyer_id, seller_id, created_at]
+      properties:
+        room_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        buyer_id:
+          type: string
+          format: uuid
+        seller_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        last_message_at:
+          type: [string, 'null']
+          format: date-time
+        product:
+          $ref: '#/components/schemas/Product'
+        last_message:
+          $ref: '#/components/schemas/ChatMessage'
+        unread_count:
+          type: integer
+          minimum: 0
+    CreateChatRoomRequest:
+      type: object
+      required: [product_id]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        other_user_id:
+          type: [string, 'null']
+          format: uuid
+          description: Wajib jika pembuat room adalah penjual (menentukan buyer).
+    ChatRoomResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/ChatRoom'
+    ChatRoomListData:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatRoom'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    ChatRoomListResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/ChatRoomListData'
+
+    ChatMessage:
+      type: object
+      required: [chat_id, room_id, sender_id, receiver_id, teks_pesan, waktu_kirim, status_baca]
+      properties:
+        chat_id:
+          type: string
+          format: uuid
+        room_id:
+          type: string
+          format: uuid
+        sender_id:
+          type: string
+          format: uuid
+        receiver_id:
+          type: string
+          format: uuid
+        teks_pesan:
+          type: string
+        waktu_kirim:
+          type: string
+          format: date-time
+        status_baca:
+          $ref: '#/components/schemas/ChatReadStatus'
+        client_message_id:
+          type: [string, 'null']
+          format: uuid
+    SendChatMessageRequest:
+      type: object
+      required: [teks_pesan]
+      properties:
+        teks_pesan:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        client_message_id:
+          type: [string, 'null']
+          format: uuid
+          description: Kunci idempotensi; wajib untuk WebSocket.
+    ChatMessageResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/ChatMessage'
+    ChatMessageListData:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        meta:
+          $ref: '#/components/schemas/CursorMeta'
+    ChatMessageListResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/ChatMessageListData'
+
+    CreateReviewRequest:
+      type: object
+      required: [product_id, skor_rating, teks_ulasan]
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        skor_rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        teks_ulasan:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    Review:
+      type: object
+      required: [review_id, product_id, reviewer_id, reviewee_id, skor_rating, teks_ulasan, waktu_ulasan]
+      properties:
+        review_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        reviewer_id:
+          type: string
+          format: uuid
+        reviewee_id:
+          type: string
+          format: uuid
+        skor_rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        teks_ulasan:
+          type: string
+        waktu_ulasan:
+          type: string
+          format: date-time
+    ReviewResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/Review'
+    ReviewListData:
+      type: object
+      required: [average_rating, total_reviews, items, meta]
+      properties:
+        average_rating:
+          type: [number, 'null']
+          format: float
+          minimum: 1
+          maximum: 5
+        total_reviews:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    ReviewListResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/ReviewListData'
+
+    CreateReportRequest:
+      type: object
+      required: [target_type, target_id, alasan, deskripsi_laporan]
+      properties:
+        target_type:
+          $ref: '#/components/schemas/ReportTargetType'
+        target_id:
+          type: string
+          format: uuid
+        alasan:
+          $ref: '#/components/schemas/ReportReason'
+        deskripsi_laporan:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        bukti_foto_url:
+          type: [string, 'null']
+          format: uri
+    Report:
+      type: object
+      required: [report_id, reporter_user_id, alasan, deskripsi_laporan, status_laporan, tanggal_laporan]
+      properties:
+        report_id:
+          type: string
+          format: uuid
+        reporter_user_id:
+          type: string
+          format: uuid
+        reported_user_id:
+          type: [string, 'null']
+          format: uuid
+        reported_product_id:
+          type: [string, 'null']
+          format: uuid
+        target_type:
+          $ref: '#/components/schemas/ReportTargetType'
+        target_id:
+          type: string
+          format: uuid
+        alasan:
+          $ref: '#/components/schemas/ReportReason'
+        deskripsi_laporan:
+          type: string
+        bukti_foto_url:
+          type: [string, 'null']
+          format: uri
+        status_laporan:
+          $ref: '#/components/schemas/ReportStatus'
+        tanggal_laporan:
+          type: string
+          format: date-time
+        resolved_by:
+          type: [string, 'null']
+          format: uuid
+        action_taken:
+          $ref: '#/components/schemas/ModerationAction'
+        executed_at:
+          type: [string, 'null']
+          format: date-time
+    ReportResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/Report'
+    ReportListData:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Report'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    ReportListResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/ReportListData'
+    ModerateReportRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          $ref: '#/components/schemas/ModerationAction'
+
+    AiSummaryRequest:
+      type: object
+      required: [target_type, target_id]
+      properties:
+        target_type:
+          $ref: '#/components/schemas/ReportTargetType'
+        target_id:
+          type: string
+          format: uuid
+    AiSummaryData:
+      type: object
+      required: [summary_text, patterns, recommended_actions, generated_at, model]
+      properties:
+        summary_text:
+          type: string
+        patterns:
+          type: array
+          items:
+            type: string
+        recommended_actions:
+          type: array
+          items:
+            type: string
+        generated_at:
+          type: string
+          format: date-time
+        model:
+          type: string
+          description: Nama model Gemini yang dipakai.
+    AiSummaryResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AiSummaryData'
+
+    SimpleStatusData:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+    SimpleStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/SimpleStatusData'
