@@ -7,6 +7,8 @@ import {
 } from '../lib/api/products'
 import { ApiError } from '../lib/api/client'
 import { authSession } from '../lib/session'
+import { openRoom } from '../lib/api/chat'
+import ReportModal from '../components/ReportModal'
 
 const nf = new Intl.NumberFormat('id-ID')
 
@@ -133,6 +135,21 @@ export default function ProductDetailPage() {
     </header>
   )
 
+    const [opening, setOpening] = useState(false)
+    const [reportOpen, setReportOpen] = useState(false)
+
+    async function startChat() {
+      if (!product || opening) return
+      setOpening(true)
+      try {
+        const room = await openRoom(product.product_id)
+        navigate(`/chat/${room.room_id}`, { state: { room } })
+      } catch (err) {
+        setNotice(err instanceof ApiError ? err.message : 'Gagal membuka chat. Coba lagi.')
+      } finally {
+        setOpening(false)
+      }
+    }
   if (loading) {
     return (
       <div className="app-shell">
@@ -213,14 +230,15 @@ export default function ProductDetailPage() {
 
       <div className="detail-bar">
         <button className="report-btn" aria-label="Laporkan produk" disabled={isOwner}
-          onClick={() => setNotice('Fitur laporan akan segera hadir.')}>
+          onClick={() => setReportOpen(true)}>
           <Flag size={20} color="#be123c" />
         </button>
-        <button className="btn" disabled={isOwner || sold}
-          onClick={() => setNotice('Fitur chat akan segera hadir.')}>
-          {chatLabel}
+        <button className="btn" disabled={isOwner || sold || opening} onClick={startChat}>
+          {opening ? 'Membuka…' : chatLabel}
         </button>
       </div>
+        <ReportModal open={reportOpen} targetType="product" targetId={product.product_id}
+        onClose={() => setReportOpen(false)} onDone={setNotice} />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import type { ApiEnvelope } from './types'
 import type { RawResponse } from './client'
 import { queryMockProducts, getMockProduct } from './mockProducts'
+import { mockChatRoute, MOCK_POINTS } from './mockChat'
 
 const wait = (ms = 600) => new Promise((r) => setTimeout(r, ms))
 
@@ -21,6 +22,8 @@ export async function mockRequest(method: string, path: string, raw: unknown): P
   await wait()
   const b = (raw ?? {}) as B
   const email = String(b.email_kampus ?? '')
+  const chat = mockChatRoute(method, path, raw)
+  if (chat) return res(chat.status, chat.message, { data: chat.data, code: chat.code })
 
   const detail = path.match(/^\/products\/([^/?]+)/)
   if (method === 'GET' && detail) {
@@ -37,13 +40,7 @@ export async function mockRequest(method: string, path: string, raw: unknown): P
     return res(200, 'OK', { data: queryMockProducts(path) })
 
   if (method === 'GET' && path === '/meeting-points')
-    return res(200, 'OK', {
-      data: [
-        { location_id: 'm1', nama_titik_temu: 'Perpustakaan Pusat', pin_point_notes: 'Lobi Utama', latitude: -6.9266, longitude: 107.7715, is_active: true },
-        { location_id: 'm2', nama_titik_temu: 'Gerbang Lama (Gerlam)', pin_point_notes: 'Pos satpam sisi timur', latitude: -6.9271, longitude: 107.7702, is_active: true },
-        { location_id: 'm3', nama_titik_temu: 'Kantin PPBS', pin_point_notes: 'Dekat tempat duduk dan meja makan', latitude: -6.9259, longitude: 107.7721, is_active: true },
-      ],
-    })
+    return res(200, 'OK', { data: { items: MOCK_POINTS } })
 
   switch (path) {
     case '/auth/register': {

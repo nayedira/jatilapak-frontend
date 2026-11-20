@@ -9,6 +9,8 @@ import CatalogPage from './pages/CatalogPage'
 import SearchPage from './pages/SearchPage'
 import SearchResultsPage from './pages/SearchResultsPage'
 import ProductDetailPage from './pages/ProductDetailPage'
+import MessagesPage from './pages/MessagesPage'
+import ChatRoomPage from './pages/ChatRoomPage'
 
 export default function App() {
   return (
@@ -22,6 +24,8 @@ export default function App() {
       <Route path="/search" element={<RequireAuth><SearchPage /></RequireAuth>} />
       <Route path="/search/results" element={<RequireAuth><SearchResultsPage /></RequireAuth>} />
       <Route path="/produk/:id" element={<RequireAuth><ProductDetailPage /></RequireAuth>} />
+      <Route path="/pesan" element={<RequireAuth><MessagesPage /></RequireAuth>} />
+      <Route path="/chat/:roomId" element={<RequireAuth><ChatRoomPage /></RequireAuth>} />
     </Routes>
   )
 }
