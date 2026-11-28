@@ -11,6 +11,11 @@ import SearchResultsPage from './pages/SearchResultsPage'
 import ProductDetailPage from './pages/ProductDetailPage'
 import MessagesPage from './pages/MessagesPage'
 import ChatRoomPage from './pages/ChatRoomPage'
+import ProfilePage from './pages/ProfilePage'
+import ProfileEditPage from './pages/ProfileEditPage'
+import MyListingsPage from './pages/MyListingsPage'
+import ReviewsPage from './pages/ReviewsPage'
+import HelpPage from './pages/HelpPage'
 
 export default function App() {
   return (
@@ -26,6 +31,11 @@ export default function App() {
       <Route path="/produk/:id" element={<RequireAuth><ProductDetailPage /></RequireAuth>} />
       <Route path="/pesan" element={<RequireAuth><MessagesPage /></RequireAuth>} />
       <Route path="/chat/:roomId" element={<RequireAuth><ChatRoomPage /></RequireAuth>} />
+      <Route path="/profil" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+      <Route path="/profil/ubah" element={<RequireAuth><ProfileEditPage /></RequireAuth>} />
+      <Route path="/profil/lapak" element={<RequireAuth><MyListingsPage /></RequireAuth>} />
+      <Route path="/profil/ulasan" element={<RequireAuth><ReviewsPage /></RequireAuth>} />
+      <Route path="/bantuan" element={<RequireAuth><HelpPage /></RequireAuth>} />
     </Routes>
   )
 }

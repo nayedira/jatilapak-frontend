@@ -64,3 +64,33 @@ export async function request<T>(
   const ra = Number(res.headers.get('Retry-After'))
   return handle<T>({ httpStatus: res.status, body: json, retryAfter: ra > 0 ? ra : undefined })
 }
+
+export async function requestForm<T>(path: string, form: FormData, token?: string | null): Promise<T> {
+  if (USE_MOCK) {
+    const file = form.get('file') as File
+    const url = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(String(r.result))
+      r.onerror = () => reject(new ApiError(0, 'Gagal membaca file.'))
+      r.readAsDataURL(file)
+    })
+    return handle<T>(await mockRequest('POST', path, { url }))
+  }
+
+  let res: Response
+  try {
+    // Content-Type sengaja tidak diisi: browser menambahkan boundary multipart sendiri.
+    res = await fetch(`${BASE_URL}${PREFIX}${path}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    })
+  } catch {
+    throw new ApiError(0, 'Tidak dapat terhubung ke server. Periksa koneksi lalu coba lagi.')
+  }
+
+  let json: ApiEnvelope | null = null
+  try { json = await res.json() } catch { /* bukan JSON */ }
+  const ra = Number(res.headers.get('Retry-After'))
+  return handle<T>({ httpStatus: res.status, body: json, retryAfter: ra > 0 ? ra : undefined })
+}

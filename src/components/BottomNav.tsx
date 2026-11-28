@@ -1,10 +1,10 @@
 import { useNavigate } from 'react-router-dom'
 import { Home, Search, MessageCircle, User } from 'react-feather'
 
-type Tab = 'home' | 'search' | 'chat'
-interface Props { active: Tab; onProfile: () => void }
+type Tab = 'home' | 'search' | 'chat' | 'profile'
+interface Props { active: Tab }
 
-export default function BottomNav({ active, onProfile }: Props) {
+export default function BottomNav({ active }: Props) {
   const navigate = useNavigate()
   const tone = (k: Tab) => (active === k ? '#000' : '#969696')
   const weight = (k: Tab) => (active === k ? 3 : 2)
@@ -21,8 +21,8 @@ export default function BottomNav({ active, onProfile }: Props) {
       <button className="nav-btn" aria-label="Pesan" aria-current={cur('chat')} onClick={() => navigate('/pesan')}>
         <MessageCircle size={24} color={tone('chat')} strokeWidth={weight('chat')} />
       </button>
-      <button className="nav-btn" aria-label="Profil" onClick={onProfile}>
-        <User size={24} color="#969696" />
+      <button className="nav-btn" aria-label="Profil" aria-current={cur('profile')} onClick={() => navigate('/profil')}>
+        <User size={24} color={tone('profile')} strokeWidth={weight('profile')} />
       </button>
     </nav>
   )

@@ -2,6 +2,7 @@ import type { ApiEnvelope } from './types'
 import type { RawResponse } from './client'
 import { queryMockProducts, getMockProduct } from './mockProducts'
 import { mockChatRoute, MOCK_POINTS } from './mockChat'
+import { mockProfileRoute } from './mockProfile'
 
 const wait = (ms = 600) => new Promise((r) => setTimeout(r, ms))
 
@@ -22,6 +23,8 @@ export async function mockRequest(method: string, path: string, raw: unknown): P
   await wait()
   const b = (raw ?? {}) as B
   const email = String(b.email_kampus ?? '')
+  const prof = mockProfileRoute(method, path, raw)
+  if (prof) return res(prof.status, prof.message, { data: prof.data, code: prof.code })
   const chat = mockChatRoute(method, path, raw)
   if (chat) return res(chat.status, chat.message, { data: chat.data, code: chat.code })
 

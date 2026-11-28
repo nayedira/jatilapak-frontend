@@ -9,12 +9,14 @@ export interface ProductPhoto { foto_id: string; url: string; urutan: number; is
 
 export interface Product {
   product_id: string
+  user_id?: string
   judul_produk: string
+  deskripsi_produk?: string
   kategori: string
   harga: number
   kondisi_barang: Condition
   status_stok?: 'Available' | 'Sold'
-  lokasi?: string // BELUM ada di kontrak; opsional
+  lokasi?: string
   fotos: ProductPhoto[]
 }
 
